@@ -1,7 +1,10 @@
 # file: bit24_client.py
 
 import requests
+
 from decimal import Decimal
+from decimal import ROUND_DOWN
+
 from auth import sign_params
 
 
@@ -9,7 +12,11 @@ class Bit24Client:
 
     BASE_URL = "https://rest.bit24.cash"
 
-    def __init__(self, api_key: str, secret_key: str):
+    def __init__(
+        self,
+        api_key,
+        secret_key
+    ):
 
         self.api_key = api_key
         self.secret_key = secret_key
@@ -17,28 +24,47 @@ class Bit24Client:
         self.headers = {
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded",
-            "X-BIT24-APIKEY": self.api_key
+            "X-BIT24-APIKEY": api_key
         }
+
+    # =========================
+    # FORMAT AMOUNT
+    # BIT24 MAX 2 DECIMALS
+    # =========================
+
+    @staticmethod
+    def format_amount(value):
+
+        return str(
+            Decimal(value)
+            .quantize(
+                Decimal("0.01"),
+                rounding=ROUND_DOWN
+            )
+        )
 
     # =========================
     # GET BEST ASK
     # =========================
 
-    def get_best_ask(self,
-                     base: str,
-                     quote: str) -> Decimal:
+    def get_best_ask(
+        self,
+        base,
+        quote
+    ):
 
-        url = f"{self.BASE_URL}/pro/capi/v1/markets/order-books"
-
-        params = {
-            "base_coin": base,
-            "quote_coin": quote
-        }
+        url = (
+            f"{self.BASE_URL}"
+            "/pro/capi/v1/markets/order-books"
+        )
 
         response = requests.get(
             url,
             headers=self.headers,
-            params=params
+            params={
+                "base_coin": base,
+                "quote_coin": quote
+            }
         )
 
         response.raise_for_status()
@@ -48,38 +74,40 @@ class Bit24Client:
         if not data.get("success"):
             raise Exception(data)
 
-        sell_orders = data["data"]["sell_orders"]
-
-        if not sell_orders:
-            raise Exception("No sell orders found.")
-
-        return Decimal(sell_orders[0]["price"])
+        return Decimal(
+            data["data"]["sell_orders"][0]["price"]
+        )
 
     # =========================
     # GET BALANCE
     # =========================
 
-    def get_coin_balance(self,
-                         symbol: str) -> Decimal:
+    def get_coin_balance(
+        self,
+        symbol
+    ):
 
-        url = f"{self.BASE_URL}/asset/capi/v1/wallet/assets"
-
-        params = {
-            "without_irt": "0",
-            "without_zero": "1"
-        }
+        url = (
+            f"{self.BASE_URL}"
+            "/asset/capi/v1/wallet/assets"
+        )
 
         response = requests.get(
             url,
             headers=self.headers,
-            params=params
+            params={
+                "without_zero": "1",
+                "without_irt": "0"
+            }
         )
 
         response.raise_for_status()
 
-        data = response.json()
-
-        assets = data.get("data", {}).get("asset", [])
+        assets = (
+            response.json()
+            .get("data", {})
+            .get("asset", [])
+        )
 
         for asset in assets:
 
@@ -92,13 +120,18 @@ class Bit24Client:
         return Decimal("0")
 
     # =========================
-    # SUBMIT ORDER
+    # SEND ORDER
     # =========================
 
-    def submit_order(self,
-                     params: dict):
+    def submit_order(
+        self,
+        params
+    ):
 
-        url = f"{self.BASE_URL}/pro/capi/v1/orders/submit"
+        url = (
+            f"{self.BASE_URL}"
+            "/pro/capi/v1/orders/submit"
+        )
 
         params["signature"] = sign_params(
             self.secret_key,
@@ -111,11 +144,17 @@ class Bit24Client:
             data=params
         )
 
-        print("STATUS :", response.status_code)
-        print("RESPONSE :", response.text)
+        print(
+            "\nSTATUS:",
+            response.status_code
+        )
 
-        if response.status_code != 200:
-            raise Exception(response.text)
+        print(
+            "BODY:",
+            response.text
+        )
+
+        response.raise_for_status()
 
         return response.json()
 
@@ -123,23 +162,19 @@ class Bit24Client:
     # MARKET BUY
     # =========================
 
-    def market_buy(self,
-                   base: str,
-                   quote: str,
-                   spend_irt: str):
+    def market_buy(
+        self,
+        base,
+        quote,
+        spend_irt
+    ):
 
         params = {
             "base_coin_symbol": base,
             "quote_coin_symbol": quote,
-
-            # BUY
             "type": "1",
-
-            # MARKET
             "category_type": "1",
-
-            # HOW MUCH IRT TO SPEND
-            "quote_coin_amount": spend_irt
+            "quote_coin_amount": str(spend_irt)
         }
 
         return self.submit_order(params)
@@ -148,24 +183,21 @@ class Bit24Client:
     # LIMIT BUY
     # =========================
 
-    def limit_buy(self,
-                  base: str,
-                  quote: str,
-                  amount: str,
-                  price: str):
+    def limit_buy(
+        self,
+        base,
+        quote,
+        amount,
+        price
+    ):
 
         params = {
             "base_coin_symbol": base,
             "quote_coin_symbol": quote,
-
-            # BUY
             "type": "1",
-
-            # LIMIT
             "category_type": "0",
-
-            "price": price,
-            "amount": amount
+            "price": str(price),
+            "amount": self.format_amount(amount)
         }
 
         return self.submit_order(params)
@@ -174,22 +206,19 @@ class Bit24Client:
     # MARKET SELL
     # =========================
 
-    def market_sell(self,
-                    base: str,
-                    quote: str,
-                    amount: str):
+    def market_sell(
+        self,
+        base,
+        quote,
+        amount
+    ):
 
         params = {
             "base_coin_symbol": base,
             "quote_coin_symbol": quote,
-
-            # SELL
             "type": "0",
-
-            # MARKET
             "category_type": "1",
-
-            "amount": amount
+            "amount": self.format_amount(amount)
         }
 
         return self.submit_order(params)

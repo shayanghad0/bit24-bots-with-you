@@ -1,25 +1,24 @@
 # file: strategy.py
 
 import time
+import signal
+import sys
+
 from decimal import Decimal
-from bit24_client import Bit24Client
 
+from trade_storage import save_trade
 
-# =========================
-# CONFIG
-# =========================
 
 BASE = "ADA"
 QUOTE = "IRT"
 
-# MARKET BUY SPEND
-# IRT Amount
+# MARKET BUY
 MARKET_BUY_SPEND = "200000"
 
-# LIMIT BUY AMOUNT
+# LIMIT BUY
 LIMIT_BUY_AMOUNT = "2"
 
-# BUY DIP %
+# REBUY %
 LIMIT_BUY_DROP_PERCENT = Decimal("0.2")
 
 # TAKE PROFIT %
@@ -28,117 +27,195 @@ TAKE_PROFIT_PERCENT = Decimal("0.73")
 
 class Strategy:
 
-    def __init__(self,
-                 client: Bit24Client):
+    def __init__(
+        self,
+        client
+    ):
 
         self.client = client
 
-        self.first_buy_price = Decimal("0")
+        self.limit_price = Decimal("0")
 
-        self.limit_buy_price = Decimal("0")
+        self.sell_target = Decimal("0")
 
-        self.last_trade_price = Decimal("0")
-
-        self.sell_target_price = Decimal("0")
+        signal.signal(
+            signal.SIGINT,
+            self.ctrl_c_handler
+        )
 
     # =========================
-    # START BOT
+    # CTRL + C
+    # =========================
+
+    def ctrl_c_handler(
+        self,
+        sig,
+        frame
+    ):
+
+        print(
+            "\nCTRL+C detected."
+        )
+
+        try:
+
+            balance = (
+                self.client
+                .get_coin_balance(BASE)
+            )
+
+            print(
+                f"Balance: {balance}"
+            )
+
+            if balance <= 0:
+
+                print(
+                    "No balance found."
+                )
+
+                sys.exit(0)
+
+            response = (
+                self.client
+                .market_sell(
+                    BASE,
+                    QUOTE,
+                    balance
+                )
+            )
+
+            save_trade(
+                "CTRL_C_SELL",
+                BASE,
+                balance,
+                "MARKET",
+                response
+            )
+
+            print(
+                "Emergency sell completed."
+            )
+
+        except Exception as e:
+
+            print(
+                "Emergency sell error:",
+                e
+            )
+
+        sys.exit(0)
+
+    # =========================
+    # START
     # =========================
 
     def start(self):
 
-        # =========================
-        # GET CURRENT PRICE
-        # =========================
-
-        current_price = self.client.get_best_ask(
-            BASE,
-            QUOTE
+        current_price = (
+            self.client
+            .get_best_ask(
+                BASE,
+                QUOTE
+            )
         )
 
-        print(f"Current Price : {current_price}")
+        print(
+            f"Current Price: {current_price}"
+        )
 
         # =========================
         # MARKET BUY
         # =========================
 
-        print("Executing MARKET BUY...")
-
-        market_response = self.client.market_buy(
-            BASE,
-            QUOTE,
-            MARKET_BUY_SPEND
-        )
-
-        print(market_response)
-
-        self.first_buy_price = current_price
-
-        print(
-            f"First Buy Price : "
-            f"{self.first_buy_price}"
-        )
-
-        # =========================
-        # LIMIT BUY PRICE
-        # =========================
-
-        self.limit_buy_price = (
-            current_price *
-            (
-                Decimal("1")
-                - LIMIT_BUY_DROP_PERCENT / Decimal("100")
+        market_response = (
+            self.client
+            .market_buy(
+                BASE,
+                QUOTE,
+                MARKET_BUY_SPEND
             )
         )
 
-        self.limit_buy_price = self.limit_buy_price.quantize(
-            Decimal("1")
+        save_trade(
+            "MARKET_BUY",
+            BASE,
+            MARKET_BUY_SPEND,
+            current_price,
+            market_response
         )
 
         print(
-            f"Limit Buy Price : "
-            f"{self.limit_buy_price}"
+            "Market Buy Success."
         )
 
         # =========================
-        # CREATE LIMIT BUY
+        # LIMIT BUY
         # =========================
 
-        limit_response = self.client.limit_buy(
+        self.limit_price = (
+            current_price
+            * (
+                Decimal("1")
+                - (
+                    LIMIT_BUY_DROP_PERCENT
+                    / Decimal("100")
+                )
+            )
+        )
+
+        self.limit_price = (
+            self.limit_price
+            .quantize(
+                Decimal("1")
+            )
+        )
+
+        print(
+            f"Limit Buy Price: "
+            f"{self.limit_price}"
+        )
+
+        limit_response = (
+            self.client
+            .limit_buy(
+                BASE,
+                QUOTE,
+                LIMIT_BUY_AMOUNT,
+                self.limit_price
+            )
+        )
+
+        save_trade(
+            "LIMIT_BUY",
             BASE,
-            QUOTE,
             LIMIT_BUY_AMOUNT,
-            str(self.limit_buy_price)
+            self.limit_price,
+            limit_response
         )
-
-        print(limit_response)
-
-        # =========================
-        # LAST TRADE PRICE
-        # =========================
-
-        self.last_trade_price = self.limit_buy_price
 
         print(
-            f"Last Trade Price : "
-            f"{self.last_trade_price}"
+            "Limit Buy Created."
         )
 
         # =========================
-        # TAKE PROFIT TARGET
+        # LAST TRADE TARGET
         # =========================
 
-        self.sell_target_price = (
-            self.last_trade_price *
-            (
+        self.sell_target = (
+            self.limit_price
+            * (
                 Decimal("1")
-                + TAKE_PROFIT_PERCENT / Decimal("100")
+                + (
+                    TAKE_PROFIT_PERCENT
+                    / Decimal("100")
+                )
             )
         )
 
         print(
-            f"Take Profit Price : "
-            f"{self.sell_target_price}"
+            f"Sell Target: "
+            f"{self.sell_target}"
         )
 
         # =========================
@@ -149,47 +226,64 @@ class Strategy:
 
             try:
 
-                current_price = self.client.get_best_ask(
-                    BASE,
-                    QUOTE
+                price = (
+                    self.client
+                    .get_best_ask(
+                        BASE,
+                        QUOTE
+                    )
                 )
 
                 print(
-                    f"Current : {current_price} | "
-                    f"Target : {self.sell_target_price}"
+                    f"Current: {price} | "
+                    f"Target: {self.sell_target}"
                 )
 
-                # =========================
-                # SELL ALL
-                # =========================
+                if price >= self.sell_target:
 
-                if current_price >= self.sell_target_price:
+                    balance = (
+                        self.client
+                        .get_coin_balance(BASE)
+                    )
 
-                    balance = self.client.get_coin_balance(
-                        BASE
+                    if balance <= 0:
+
+                        print(
+                            "No balance."
+                        )
+
+                        break
+
+                    response = (
+                        self.client
+                        .market_sell(
+                            BASE,
+                            QUOTE,
+                            balance
+                        )
+                    )
+
+                    save_trade(
+                        "TAKE_PROFIT_SELL",
+                        BASE,
+                        balance,
+                        price,
+                        response
                     )
 
                     print(
-                        f"Selling ALL {BASE} : "
-                        f"{balance}"
+                        "Take Profit Hit."
                     )
-
-                    sell_response = self.client.market_sell(
-                        BASE,
-                        QUOTE,
-                        str(balance)
-                    )
-
-                    print(sell_response)
-
-                    print("Take Profit Executed.")
 
                     break
 
                 time.sleep(5)
 
-            except Exception as error:
+            except Exception as e:
 
-                print(error)
+                print(
+                    "Loop Error:",
+                    e
+                )
 
                 time.sleep(5)
