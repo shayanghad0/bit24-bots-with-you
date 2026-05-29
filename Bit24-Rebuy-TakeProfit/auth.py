@@ -2,17 +2,17 @@
 
 import hmac
 import hashlib
+from urllib.parse import urlencode
 
 
 def sign_params(secret_key: str, params: dict) -> str:
 
-    query_string = "&".join(
-        f"{k}={params[k]}"
-        for k in sorted(params)
-    )
+    query = urlencode(sorted(params.items()))
 
-    return hmac.new(
-        secret_key.encode("utf-8"),
-        query_string.encode("utf-8"),
+    signature = hmac.new(
+        secret_key.encode(),
+        query.encode(),
         hashlib.sha256
     ).hexdigest()
+
+    return signature

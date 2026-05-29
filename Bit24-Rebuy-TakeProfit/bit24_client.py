@@ -17,14 +17,16 @@ class Bit24Client:
         self.headers = {
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded",
-            "X-BIT24-APIKEY": api_key
+            "X-BIT24-APIKEY": self.api_key
         }
 
     # =========================
     # GET BEST ASK
     # =========================
 
-    def get_best_ask(self, base: str, quote: str) -> Decimal:
+    def get_best_ask(self,
+                     base: str,
+                     quote: str) -> Decimal:
 
         url = f"{self.BASE_URL}/pro/capi/v1/markets/order-books"
 
@@ -43,6 +45,9 @@ class Bit24Client:
 
         data = response.json()
 
+        if not data.get("success"):
+            raise Exception(data)
+
         sell_orders = data["data"]["sell_orders"]
 
         if not sell_orders:
@@ -51,16 +56,17 @@ class Bit24Client:
         return Decimal(sell_orders[0]["price"])
 
     # =========================
-    # GET WALLET BALANCE
+    # GET BALANCE
     # =========================
 
-    def get_coin_balance(self, symbol: str) -> Decimal:
+    def get_coin_balance(self,
+                         symbol: str) -> Decimal:
 
         url = f"{self.BASE_URL}/asset/capi/v1/wallet/assets"
 
         params = {
-            "without_zero": "1",
-            "without_irt": "0"
+            "without_irt": "0",
+            "without_zero": "1"
         }
 
         response = requests.get(
@@ -79,7 +85,9 @@ class Bit24Client:
 
             if asset["symbol"] == symbol:
 
-                return Decimal(asset["available_balance"])
+                return Decimal(
+                    asset["available_balance"]
+                )
 
         return Decimal("0")
 
@@ -87,7 +95,8 @@ class Bit24Client:
     # SUBMIT ORDER
     # =========================
 
-    def submit_order(self, params: dict):
+    def submit_order(self,
+                     params: dict):
 
         url = f"{self.BASE_URL}/pro/capi/v1/orders/submit"
 
@@ -102,7 +111,11 @@ class Bit24Client:
             data=params
         )
 
-        response.raise_for_status()
+        print("STATUS :", response.status_code)
+        print("RESPONSE :", response.text)
+
+        if response.status_code != 200:
+            raise Exception(response.text)
 
         return response.json()
 
@@ -113,14 +126,20 @@ class Bit24Client:
     def market_buy(self,
                    base: str,
                    quote: str,
-                   amount: str):
+                   spend_irt: str):
 
         params = {
             "base_coin_symbol": base,
             "quote_coin_symbol": quote,
+
+            # BUY
             "type": "1",
+
+            # MARKET
             "category_type": "1",
-            "amount": amount
+
+            # HOW MUCH IRT TO SPEND
+            "quote_coin_amount": spend_irt
         }
 
         return self.submit_order(params)
@@ -138,8 +157,13 @@ class Bit24Client:
         params = {
             "base_coin_symbol": base,
             "quote_coin_symbol": quote,
+
+            # BUY
             "type": "1",
+
+            # LIMIT
             "category_type": "0",
+
             "price": price,
             "amount": amount
         }
@@ -158,8 +182,13 @@ class Bit24Client:
         params = {
             "base_coin_symbol": base,
             "quote_coin_symbol": quote,
+
+            # SELL
             "type": "0",
+
+            # MARKET
             "category_type": "1",
+
             "amount": amount
         }
 

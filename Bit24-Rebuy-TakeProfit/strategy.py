@@ -12,22 +12,24 @@ from bit24_client import Bit24Client
 BASE = "ADA"
 QUOTE = "IRT"
 
-# First Market Buy
-MARKET_BUY_AMOUNT = "2"
+# MARKET BUY SPEND
+# IRT Amount
+MARKET_BUY_SPEND = "200000"
 
-# Second Limit Buy
+# LIMIT BUY AMOUNT
 LIMIT_BUY_AMOUNT = "2"
 
-# Limit Buy Percentage
+# BUY DIP %
 LIMIT_BUY_DROP_PERCENT = Decimal("0.2")
 
-# Take Profit
+# TAKE PROFIT %
 TAKE_PROFIT_PERCENT = Decimal("0.73")
 
 
 class Strategy:
 
-    def __init__(self, client: Bit24Client):
+    def __init__(self,
+                 client: Bit24Client):
 
         self.client = client
 
@@ -40,12 +42,14 @@ class Strategy:
         self.sell_target_price = Decimal("0")
 
     # =========================
-    # START
+    # START BOT
     # =========================
 
     def start(self):
 
-        print("Getting market price...")
+        # =========================
+        # GET CURRENT PRICE
+        # =========================
 
         current_price = self.client.get_best_ask(
             BASE,
@@ -55,19 +59,18 @@ class Strategy:
         print(f"Current Price : {current_price}")
 
         # =========================
-        # FIRST BUY
-        # MARKET BUY 2 ADA
+        # MARKET BUY
         # =========================
 
         print("Executing MARKET BUY...")
 
-        market_buy_response = self.client.market_buy(
+        market_response = self.client.market_buy(
             BASE,
             QUOTE,
-            MARKET_BUY_AMOUNT
+            MARKET_BUY_SPEND
         )
 
-        print(market_buy_response)
+        print(market_response)
 
         self.first_buy_price = current_price
 
@@ -77,8 +80,7 @@ class Strategy:
         )
 
         # =========================
-        # SECOND BUY
-        # LIMIT BUY
+        # LIMIT BUY PRICE
         # =========================
 
         self.limit_buy_price = (
@@ -94,18 +96,22 @@ class Strategy:
         )
 
         print(
-            f"Creating LIMIT BUY at "
+            f"Limit Buy Price : "
             f"{self.limit_buy_price}"
         )
 
-        limit_buy_response = self.client.limit_buy(
+        # =========================
+        # CREATE LIMIT BUY
+        # =========================
+
+        limit_response = self.client.limit_buy(
             BASE,
             QUOTE,
             LIMIT_BUY_AMOUNT,
             str(self.limit_buy_price)
         )
 
-        print(limit_buy_response)
+        print(limit_response)
 
         # =========================
         # LAST TRADE PRICE
@@ -119,7 +125,7 @@ class Strategy:
         )
 
         # =========================
-        # TARGET SELL PRICE
+        # TAKE PROFIT TARGET
         # =========================
 
         self.sell_target_price = (
@@ -131,12 +137,12 @@ class Strategy:
         )
 
         print(
-            f"Target Sell Price : "
+            f"Take Profit Price : "
             f"{self.sell_target_price}"
         )
 
         # =========================
-        # MONITOR MARKET
+        # LOOP
         # =========================
 
         while True:
@@ -154,7 +160,7 @@ class Strategy:
                 )
 
                 # =========================
-                # TAKE PROFIT
+                # SELL ALL
                 # =========================
 
                 if current_price >= self.sell_target_price:
