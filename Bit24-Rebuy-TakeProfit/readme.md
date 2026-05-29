@@ -1,492 +1,368 @@
-# 🤖 ربات استراتژی ساده ADA برای Bit24
+# ربات معاملاتی DCA ADA/IRT (Bit24)
 
-یک ربات معاملاتی ساده برای صرافی Bit24 با زبان Python.
-
-این ربات به صورت خودکار:
-
-1. خرید اولیه را با سفارش MARKET انجام می‌دهد.
-2. یک سفارش LIMIT BUY در قیمت 0.2٪ پایین‌تر ثبت می‌کند.
-3. قیمت بازار را به صورت مداوم بررسی می‌کند.
-4. زمانی که قیمت به 0.73٪ سود نسبت به آخرین خرید برسد، تمام موجودی ADA را می‌فروشد.
-5. تمام معاملات را در فایل `trade.json` ذخیره می‌کند.
-6. در صورت فشردن `CTRL + C` تلاش می‌کند تمام موجودی قابل فروش را به صورت MARKET SELL بفروشد.
+این پروژه یک ربات معاملاتی خودکار برای بازار **ADA/IRT** در صرافی Bit24 است که از استراتژی **DCA + برداشت سود مرحله‌ای** استفاده می‌کند.
 
 ---
 
-# 📈 منطق استراتژی
+## 📌 توضیح استراتژی
 
-## مرحله اول — خرید اولیه
+این ربات یک ساختار ورود پله‌ای و خروج مستقل دارد:
 
-ربات در شروع اجرا:
+### ورودها (Buy)
+
+* **ورود اولیه:** خرید مارکت دقیقاً 2 ADA
+* **خرید پله‌ای 1:** سفارش لیمیت در قیمت **0.21٪ پایین‌تر از قیمت ورود اولیه**
+* **خرید پله‌ای 2:** سفارش لیمیت در قیمت **0.42٪ پایین‌تر از قیمت ورود اولیه**
+
+---
+
+### خروج‌ها (Take Profit)
+
+هر پوزیشن به صورت مستقل مدیریت می‌شود:
+
+| پوزیشن | نوع ورود | حد سود |
+| ------ | -------- | ------ |
+| اولیه  | مارکت    | +0.5٪  |
+| پله 1  | لیمیت    | +0.7٪  |
+| پله 2  | لیمیت    | +1.0٪  |
+
+نکته مهم:
+
+* هر پوزیشن جداگانه فروخته می‌شود
+* بقیه سفارش‌ها بعد از TP لغو نمی‌شوند
+* سیستم کاملاً غیرهمبسته (Independent Positions) است
+
+---
+
+## 🔁 روند اجرای ربات
+
+1. خرید مارکت 2 ADA
+2. ذخیره قیمت ورود (start_price)
+3. ثبت دو سفارش لیمیت پایین‌تر از قیمت ورود
+4. مانیتورینگ مداوم:
+
+   * وضعیت پر شدن سفارش‌ها
+   * قیمت بهترین BID
+5. فعال شدن حد سودها و فروش مارکت
+6. هنگام توقف (Ctrl+C):
+
+   * لغو تمام سفارش‌های باز
+   * فروش باقی‌مانده ADA
+
+---
+
+## ⚙️ ویژگی‌ها
+
+* ✔ استراتژی DCA چندمرحله‌ای
+* ✔ مدیریت مستقل هر پوزیشن
+* ✔ حد سود جداگانه برای هر ورود
+* ✔ خروج سریع با مارکت
+* ✔ ثبت کامل معاملات (Logging)
+* ✔ ذخیره وضعیت TP در فایل
+* ✔ هندلینگ توقف امن (Graceful Shutdown)
+
+---
+
+## 🧠 تنظیمات اصلی
+
+در فایل اصلی:
 
 ```python
-2 ADA
-```
-
-را با سفارش MARKET خریداری می‌کند.
-
----
-
-## مرحله دوم — خرید پله‌ای
-
-پس از خرید اولیه، یک سفارش LIMIT BUY ایجاد می‌شود.
-
-قیمت سفارش:
-
-```text
-0.2٪ پایین‌تر از قیمت فعلی بازار
-```
-
-مثال:
-
-| قیمت فعلی | قیمت سفارش |
-| --------- | ---------- |
-| 100000    | 99800      |
-
----
-
-## مرحله سوم — حد سود
-
-ربات هر 5 ثانیه قیمت بازار را بررسی می‌کند.
-
-اگر قیمت به:
-
-```text
-0.73٪ بالاتر از آخرین خرید
-```
-
-برسد:
-
-```text
-تمام موجودی ADA فروخته می‌شود.
+PAIR_BASE = "ADA"
+PAIR_QUOTE = "IRT"
+QTY = "2"
 ```
 
 ---
 
-# 📂 ساختار پروژه
+## 📈 قوانین حد سود
 
-```text
-project/
-├── auth.py
-├── bit24_client.py
-├── trade_storage.py
-├── strategy.py
-├── main.py
-├── trade.json
-└── requirements.txt
-```
+* ورود اولیه → +0.5٪
+* پله اول → +0.7٪
+* پله دوم → +1.0٪
 
 ---
 
-# ⚙️ نصب
+## ⚠️ مدل ریسک
 
-## دریافت پروژه
+این ربات:
+
+* بر اساس میانگین‌گیری (DCA) طراحی شده
+* در روند نزولی خرید اضافه انجام می‌دهد
+* حد ضرر ندارد (Stop Loss پیش‌فرض ندارد)
+* مناسب بازارهای پرنوسان با مدیریت دستی ریسک است
+
+---
+
+## 📦 نیازمندی‌ها
 
 ```bash
-git clone YOUR_REPOSITORY
+pip install requests
 ```
 
 ---
 
-## نصب کتابخانه‌ها
+## 🔌 API مورد نیاز
 
-```bash
-pip install -r requirements.txt
-```
+این پروژه از API صرافی Bit24 استفاده می‌کند:
 
----
+[https://docs.bit24.cash/#api-24](https://docs.bit24.cash/#api-24)
 
-# ▶️ اجرای ربات
+شامل:
 
-```bash
-python main.py
-```
-
----
-
-# 🔑 کلیدهای API
-
-هنگام اجرا ربات از شما دریافت می‌کند:
-
-```text
-API KEY
-SECRET KEY
-```
-
-مثال:
-
-```text
-API KEY : xxxxxxxxx
-SECRET KEY : xxxxxxxxx
-```
+* ثبت سفارش
+* دریافت وضعیت سفارش
+* داده‌های بازار
+* موجودی کیف پول
 
 ---
 
-# 🛠 تنظیمات
-
-در فایل:
-
-```python
-strategy.py
-```
-
-مقادیر زیر قابل تغییر هستند:
-
-```python
-BASE = "ADA"
-QUOTE = "IRT"
-
-MARKET_BUY_SPEND = "200000"
-
-LIMIT_BUY_AMOUNT = "2"
-
-LIMIT_BUY_DROP_PERCENT = Decimal("0.2")
-
-TAKE_PROFIT_PERCENT = Decimal("0.73")
-```
-
-می‌توانید موارد زیر را تغییر دهید:
-
-* ارز مورد معامله
-* مقدار خرید اولیه
-* مقدار خرید پله‌ای
-* درصد خرید در اصلاح قیمت
-* درصد حد سود
-
----
-
-# 💾 ذخیره معاملات
-
-تمام معاملات در فایل زیر ذخیره می‌شوند:
-
-```text
-trade.json
-```
-
-اطلاعات ذخیره شده شامل:
-
-* زمان معامله
-* نوع معامله
-* مقدار
-* قیمت
-* پاسخ API
-
----
-
-# 🚨 خروج اضطراری
-
-در صورت فشردن:
-
-```text
-CTRL + C
-```
-
-ربات:
-
-1. موجودی فعلی ارز را دریافت می‌کند.
-2. موجودی قابل فروش را محاسبه می‌کند.
-3. سفارش فروش MARKET ارسال می‌کند.
-4. نتیجه را در `trade.json` ذخیره می‌کند.
-
----
-
-# ✨ امکانات
-
-* خرید MARKET
-* خرید LIMIT
-* فروش MARKET
-* حد سود خودکار
-* ذخیره تاریخچه معاملات
-* خروج اضطراری با CTRL+C
-* امضای HMAC SHA256
-* ساختار چند فایلی و قابل توسعه
-* مدیریت خطاهای API
-
----
-
-# 📋 پیش‌نیازها
-
-* Python 3.10 یا جدیدتر
-* دسترسی به API صرافی Bit24
-* API Key و Secret Key معتبر
-
----
-
-# 🔒 نکات امنیتی
-
-هرگز اطلاعات زیر را داخل کد ذخیره نکنید:
-
-```python
-API_KEY
-SECRET_KEY
-```
-
-همیشه از:
-
-```python
-input()
-```
-
-یا متغیرهای محیطی (Environment Variables) استفاده کنید.
-
----
-
-# ⚠️ سلب مسئولیت
-
-این پروژه صرفاً برای اهداف آموزشی و تحقیقاتی ارائه شده است.
-
-معامله در بازار رمزارزها دارای ریسک مالی است و تمامی مسئولیت سود و زیان بر عهده کاربر خواهد بود.
-
-# 🤖 Bit24 ADA Simple Strategy Bot
-
-A lightweight automated trading bot for the Bit24 exchange written in Python.
-
-The bot automatically:
-
-1. Executes an initial MARKET BUY.
-2. Creates one LIMIT BUY order 0.2% below the current market price.
-3. Monitors the market continuously.
-4. Sells the entire ADA balance when the configured profit target is reached.
-5. Stores all trade activity in `trade.json`.
-6. Attempts an emergency MARKET SELL when the user presses `CTRL + C`.
-
----
-
-# 📈 Strategy Logic
-
-## Step 1 — Initial Market Buy
-
-The bot starts by purchasing ADA instantly using a MARKET order.
-
-Example:
-
-```python
-2 ADA
-```
-
----
-
-## Step 2 — Rebuy Order
-
-After the first purchase, the bot creates a single LIMIT BUY order.
-
-Order price:
-
-```text
-0.2% below the current market price
-```
-
-Example:
-
-| Current Price | Limit Buy Price |
-| ------------- | --------------- |
-| 100000        | 99800           |
-
----
-
-## Step 3 — Take Profit
-
-The bot checks the market price every 5 seconds.
-
-When the price reaches:
-
-```text
-+0.73% profit from the latest buy price
-```
-
-the bot will:
-
-```text
-SELL ALL AVAILABLE ADA BALANCE
-```
-
-using a MARKET SELL order.
-
----
-
-# 📂 Project Structure
-
-```text
-project/
-├── auth.py
-├── bit24_client.py
-├── trade_storage.py
-├── strategy.py
-├── main.py
-├── trade.json
-└── requirements.txt
-```
-
----
-
-# ⚙️ Installation
-
-## Clone Repository
-
-```bash
-git clone YOUR_REPOSITORY
-```
-
----
-
-## Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-# ▶️ Run Bot
+## ▶️ اجرا
 
 ```bash
 python main.py
 ```
 
----
+سپس:
 
-# 🔑 API Credentials
-
-The bot will ask for:
-
-```text
-API KEY
-SECRET KEY
-```
-
-when starting.
-
-Example:
-
-```text
-API KEY : xxxxxxxxx
-SECRET KEY : xxxxxxxxx
-```
+* API Key را وارد کنید
+* Secret Key را وارد کنید
 
 ---
 
-# 🛠 Configuration
+## 💾 فایل‌های خروجی
 
-Inside:
+### `trade.json`
+
+ثبت کامل تراکنش‌ها:
+
+* خریدها
+* فروش‌ها
+* خروج اضطراری
+
+### `tp.json`
+
+ذخیره وضعیت حد سود:
+
+* قیمت هدف
+* وضعیت اجرا
+* اطلاعات هر پوزیشن
+
+---
+
+## 🛑 توقف ربات (Ctrl+C)
+
+در هنگام توقف:
+
+1. تمام سفارش‌های باز لغو می‌شوند
+2. موجودی باقی‌مانده ADA فروخته می‌شود
+3. اطلاعات معاملات ذخیره می‌شود
+
+---
+
+## 📌 نکات مهم
+
+* حد سود بر اساس **Best Bid** محاسبه می‌شود
+* امکان لغزش قیمت (Slippage) در فروش وجود دارد
+* سفارش‌های ناموفق retry نمی‌شوند
+* فقط برای جفت‌ارز ADA/IRT طراحی شده است
+
+---
+
+## 🧩 معماری سیستم
+
+* اجرای حلقه polling هر 3 ثانیه
+* مدیریت state برای هر پوزیشن
+* اتصال مستقیم REST API
+* بدون websocket (سادگی + کنترل بیشتر)
+
+---
+
+## 📄 لایسنس
+
+MIT — استفاده آزاد، مسئولیت استفاده با کاربر است.
+
+---
+
+# ADA/IRT DCA Trading Bot (Bit24)
+
+A deterministic DCA (Dollar Cost Averaging) trading bot for the **ADA/IRT** market on Bit24 exchange.
+It executes a 3-step entry grid with independent take-profit logic per position.
+
+---
+
+## Strategy Overview
+
+This bot implements a structured accumulation + partial profit-taking system:
+
+### Entry Logic
+
+* **Initial Entry:** Market buy of exactly **2 ADA**
+* **Grid Buy #1:** Limit buy at **-0.21%** from initial price
+* **Grid Buy #2:** Limit buy at **-0.42%** from initial price
+
+### Take Profit Logic (Independent per position)
+
+| Position | Entry Type | TP Trigger |
+| -------- | ---------- | ---------- |
+| initial  | market buy | +0.5%      |
+| limit1   | grid buy   | +0.7%      |
+| limit2   | grid buy   | +1.0%      |
+
+Each position:
+
+* Is tracked independently
+* Has its own TP condition
+* Is sold separately via market sell
+* Does NOT cancel other positions
+
+---
+
+## Execution Flow
+
+1. Place market buy (2 ADA)
+2. Capture executed price as `start_price`
+3. Place two limit buy orders below market
+4. Continuously monitor:
+
+   * Order fill status
+   * Best bid price
+5. Trigger TP sells when conditions are met
+6. On shutdown:
+
+   * Cancel all open orders
+   * Sell remaining ADA balance
+
+---
+
+## Features
+
+* ✔ Multi-layer DCA grid
+* ✔ Independent position tracking
+* ✔ Automatic TP execution per entry
+* ✔ Market-based execution for exits
+* ✔ Graceful shutdown handler (Ctrl+C)
+* ✔ Trade logging (`trade.json`)
+* ✔ TP state persistence (`tp.json`)
+
+---
+
+## Configuration
+
+Inside `main.py`:
 
 ```python
-strategy.py
+PAIR_BASE = "ADA"
+PAIR_QUOTE = "IRT"
+QTY = "2"
 ```
-
-you can customize:
-
-```python
-BASE = "ADA"
-QUOTE = "IRT"
-
-MARKET_BUY_SPEND = "200000"
-
-LIMIT_BUY_AMOUNT = "2"
-
-LIMIT_BUY_DROP_PERCENT = Decimal("0.2")
-
-TAKE_PROFIT_PERCENT = Decimal("0.73")
-```
-
-Available customizations:
-
-* Trading coin
-* Base currency
-* Initial buy amount
-* Rebuy amount
-* Rebuy percentage
-* Take-profit percentage
 
 ---
 
-# 💾 Trade History
+## Take Profit Rules
 
-All trades are automatically stored in:
+From initial market entry price:
 
-```text
-trade.json
+* Initial position → +0.5%
+* First limit entry → +0.7%
+* Second limit entry → +1.0%
+
+---
+
+## Risk Model
+
+This is a **directional averaging bot**, not a hedged system:
+
+* Exposure increases on dips
+* Exits are staggered (not all-in/all-out)
+* No stop-loss is implemented by default
+
+---
+
+## Requirements
+
+```bash
+pip install requests
 ```
 
-Each record contains:
+---
 
-* Timestamp
-* Trade type
-* Coin
-* Amount
-* Price
-* API response
+## API Dependency
 
-This makes debugging and strategy analysis easier.
+This bot depends on Bit24 API:
+
+[https://docs.bit24.cash/#api-24](https://docs.bit24.cash/#api-24)
+
+Required endpoints:
+
+* Market data
+* Order submission
+* Order status
+* Wallet balance
 
 ---
 
-# 🚨 Emergency Exit (CTRL + C)
+## Run
 
-When:
-
-```text
-CTRL + C
+```bash
+python main.py
 ```
 
-is pressed during execution, the bot will:
+Then enter:
 
-1. Fetch the available ADA balance.
-2. Calculate the sellable amount.
-3. Send a MARKET SELL order.
-4. Save the result into `trade.json`.
-5. Exit safely.
+* API Key
+* Secret Key
 
 ---
 
-# ✨ Features
+## Output Files
 
-* MARKET BUY
-* LIMIT BUY
-* MARKET SELL
-* Automatic Take Profit
-* Trade History Logging
-* Emergency Exit Support
-* HMAC SHA256 Signature Authentication
-* Multi-file Architecture
-* Error Handling
-* Bit24 API Integration
+### `trade.json`
 
----
+Stores all executed trades:
 
-# 📋 Requirements
+* buy fills
+* sell executions
+* shutdown liquidation
 
-* Python 3.10+
-* Bit24 API Access
-* Valid API Key
-* Valid Secret Key
+### `tp.json`
+
+Stores active take-profit levels:
+
+* price targets
+* position state
+* execution flags
 
 ---
 
-# 🔒 Security Warning
+## Shutdown Behavior
 
-Never hardcode:
+When interrupted (Ctrl+C):
 
-```python
-API_KEY
-SECRET_KEY
-```
-
-inside source code.
-
-Always use:
-
-```python
-input()
-```
-
-or Environment Variables.
+1. All open orders are cancelled
+2. Remaining ADA balance is liquidated at market
+3. Logs are saved
 
 ---
 
-# ⚠️ Disclaimer
+## Important Notes
 
-This project is provided for educational and research purposes only.
+* Best bid is used as TP trigger (not last trade price)
+* Market sells may suffer slippage in low liquidity conditions
+* No retry queue for failed limit orders (intentional simplicity)
+* Designed for single-pair execution only (ADA/IRT)
 
-Cryptocurrency trading involves financial risk.
+---
 
-Use this software entirely at your own risk. The author assumes no responsibility for any financial losses, damages, or account-related issues resulting from the use of this bot.
+## Architecture Summary
+
+* Stateless execution loop with persistent logs
+* Position-based state machine (initial / limit1 / limit2)
+* Polling-based market watcher (3s interval)
+* Direct REST API integration (no websocket dependency)
+
+---
+
+## License
+
+MIT — use freely, modify responsibly.

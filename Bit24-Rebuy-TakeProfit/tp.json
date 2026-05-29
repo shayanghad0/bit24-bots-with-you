@@ -1,0 +1,20 @@
+[
+  {
+    "position": "initial",
+    "tp_price": "40012.065",
+    "amount": "0",
+    "executed": false
+  },
+  {
+    "position": "limit1",
+    "tp_price": "40091.691",
+    "amount": "0",
+    "executed": false
+  },
+  {
+    "position": "limit2",
+    "tp_price": "40211.13",
+    "amount": "0",
+    "executed": false
+  }
+]
